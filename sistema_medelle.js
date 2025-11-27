@@ -1,9 +1,9 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO FINAL (DESBLOQUEADA)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO CORREÇÃO TIMEOUT (PORTA 587)
  * ---------------------------------------------------------
- * * CORREÇÃO:
- * - Removida a trava de segurança que impedia o envio com o e-mail da clínica.
- * - Credenciais já configuradas no código.
+ * * SOLUÇÃO PARA ERRO "CONNECTION TIMEOUT":
+ * - Mudança para porta 587 (STARTTLS) que é mais compatível com o Render.
+ * - Adição de logs de debug detalhados no Nodemailer.
  */
 
 const express = require('express');
@@ -23,42 +23,90 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ⚠️ CARREGAMENTO DE VARIÁVEIS
-// Seus dados já estão fixos aqui:
 const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
 const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
 // LOGS NO SERVIDOR
 console.log("========================================");
-console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (DESBLOQUEADO)");
+console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (FIX 587)");
 console.log("========================================");
-console.log("✅ Credenciais carregadas para: " + EMAIL_CLINICA);
 
-// --- CONFIGURAÇÃO ROBUSTA (IPV4 FORCE) ---
-const transporter = nodemailer.createTransport({
+if (!EMAIL_CLINICA || !SENHA_APP) {
+    console.error("❌ ERRO CRÍTICO: Variáveis de ambiente não encontradas.");
+} else {
+    console.log("✅ Credenciais detectadas.");
+}
+
+const transporter587 = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 587,
-    secure: false, // false para porta 587
-    auth: {
-        user: EMAIL_CLINICA,
-        pass: SENHA_APP
-    },
-    family: 4, // Força IPv4 para evitar timeout
-    tls: {
-        rejectUnauthorized: false
-    },
-    connectionTimeout: 20000,
-    greetingTimeout: 20000,
-    socketTimeout: 20000
+    secure: false,
+    auth: { user: EMAIL_CLINICA, pass: SENHA_APP },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
+    pool: true,
+    maxConnections: 1,
+    maxMessages: 50,
+    debug: true,
+    logger: true
+});
+
+const transporter465 = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user: EMAIL_CLINICA, pass: SENHA_APP },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
+    pool: true,
+    maxConnections: 1,
+    maxMessages: 50,
+    debug: true,
+    logger: true
 });
 
 // --- VERIFICAÇÃO IMEDIATA ---
-transporter.verify(function (error, success) {
+transporter587.verify(function (error, success) {
     if (error) {
-        console.error("❌ FALHA NA CONEXÃO COM GMAIL:", error);
+        console.error("❌ FALHA NA CONEXÃO COM GMAIL (VERIFY):");
+        console.error(error);
     } else {
-        console.log("✅ CONEXÃO ESTABELECIDA! PRONTO PARA ENVIAR.");
+        console.log("✅ CONEXÃO SMTP 587 ESTABELECIDA COM SUCESSO!");
     }
 });
+
+function formatMailError(err) {
+    return {
+        code: err && err.code,
+        message: err && err.message,
+        command: err && err.command,
+        response: err && err.response,
+        responseCode: err && err.responseCode
+    };
+}
+
+async function sendMailWithFallback(options) {
+    try {
+        return await transporter587.sendMail(options);
+    } catch (e1) {
+        const timeoutLike = (e1 && (e1.code === 'ETIMEDOUT' || e1.code === 'ECONNECTION' || e1.code === 'ESOCKET' || e1.code === 'ENOTFOUND')) || /timeout/i.test((e1 && e1.message) || '');
+        if (!timeoutLike) throw e1;
+        try {
+            return await transporter465.sendMail(options);
+        } catch (e2) {
+            const primary = formatMailError(e1);
+            const fallback = formatMailError(e2);
+            const err = new Error(`Falha no envio via 587 e 465`);
+            err.primary = primary;
+            err.fallback = fallback;
+            throw err;
+        }
+    }
+}
 
 // --- FUNÇÕES DE BANCO DE DADOS ---
 const lerBanco = () => {
@@ -81,6 +129,20 @@ app.get('/', (req, res) => {
 
 app.get('/ping', (req, res) => {
     res.send('Pong! Servidor online.');
+});
+
+app.get('/api/email-status', async (req, res) => {
+    try {
+        await transporter587.verify();
+        return res.json({ ok: true, porta: 587 });
+    } catch (e1) {
+        try {
+            await transporter465.verify();
+            return res.json({ ok: true, porta: 465, fallback: true, primarioErro: formatMailError(e1) });
+        } catch (e2) {
+            return res.status(500).json({ ok: false, primarioErro: formatMailError(e1), fallbackErro: formatMailError(e2) });
+        }
+    }
 });
 
 app.get('/api/pacientes', (req, res) => {
@@ -112,32 +174,35 @@ app.delete('/api/pacientes/:id', (req, res) => {
 
 // --- ROTA DE TESTE MANUAL ---
 app.post('/api/testar-envio', async (req, res) => {
-    console.log("⚡ [TESTE] Tentando enviar...");
+    console.log("⚡ [TESTE MANUAL] Iniciando...");
 
-    // REMOVI A TRAVA QUE BLOQUEAVA SEU E-MAIL AQUI
+    if (!EMAIL_CLINICA || !SENHA_APP) {
+        return res.status(500).json({ erro: "Variáveis de ambiente não configuradas." });
+    }
 
     try {
-        const info = await transporter.sendMail({
-            from: `"Medelle Sistema de Gestão de Clientes" <${EMAIL_CLINICA}>`,
+        const info = await sendMailWithFallback({
+            from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
             to: EMAIL_CLINICA,
-            subject: 'Teste Medelle (Sistema Desbloqueado)',
-            text: 'Sucesso! O sistema está configurado e enviando e-mails corretamente.'
+            subject: 'Teste de Configuração - Medelle (Porta 587)',
+            text: 'Seu sistema na nuvem conectou com sucesso via porta 587!'
         });
 
-        console.log("✅ Enviado! ID: " + info.messageId);
-        res.json({ mensagem: "SUCESSO! E-mail enviado corretamente." });
+        console.log("✅ E-mail enviado! ID: " + info.messageId);
+        res.json({ mensagem: "SUCESSO! E-mail enviado." });
 
     } catch (error) {
-        console.error("❌ Erro:", error);
-        res.status(500).json({ erro: "ERRO SMTP: " + (error.message || error.code) });
+        console.error("❌ Erro no envio:", error);
+        const payload = error.primary || error.fallback ? { mensagem: error.message, primario: error.primary, fallback: error.fallback } : { mensagem: error.message };
+        res.status(500).json({ erro: payload });
     }
 });
 
 // --- AUTOMAÇÃO (CRON JOB) ---
 async function verificarEEnviarNotificacoes() {
-    // REMOVI A TRAVA DE AUTOMAÇÃO AQUI TAMBÉM
+    if (!EMAIL_CLINICA || !SENHA_APP) return console.log("⚠️ Automação pulada: Credenciais ausentes.");
 
-    console.log('⏰ Verificando 48h...');
+    console.log('⏰ Verificando retornos para daqui a 48 horas...');
     
     const hoje = new Date();
     hoje.setHours(hoje.getHours() - 3); 
@@ -146,7 +211,7 @@ async function verificarEEnviarNotificacoes() {
     alvo.setDate(hoje.getDate() + 2); 
     const dataAlvoString = alvo.toISOString().split('T')[0];
     
-    console.log(`🔎 Buscando para: ${dataAlvoString}`);
+    console.log(`🔎 Buscando agendamentos para: ${dataAlvoString}`);
 
     const pacientes = lerBanco();
     
@@ -163,14 +228,14 @@ async function enviarEmailPaciente(p) {
     const corpoEmail = `Olá ${p.name},\n\nLembrete Medelle Estética: Seu retorno para "${p.procedure}" está previsto para daqui a 48 horas (${dataBonita}).\n\nAguardamos sua confirmação!\n\nAtt, Medelle Estética.`;
 
     try {
-        await transporter.sendMail({
+        await sendMailWithFallback({
             from: `"Medelle Estética" <${EMAIL_CLINICA}>`,
             to: p.email,
             cc: EMAIL_CLINICA,
             subject: 'Lembrete: Retorno em 48h - Medelle',
             text: corpoEmail
         });
-        console.log(`✅ Enviado para ${p.email}`);
+        console.log(`✅ E-mail enviado para ${p.email}`);
     } catch (error) {
         console.error(`❌ Erro no envio para ${p.name}:`, error);
     }
@@ -180,8 +245,6 @@ cron.schedule('0 9 * * *', verificarEEnviarNotificacoes);
 
 app.listen(PORT, () => {
     console.log(`\n💎 MEDELLE ESTÉTICA - ONLINE NA PORTA ${PORT}`);
-    salvarBanco([]); 
-    console.log("♻️  Banco reiniciado.");
 });
 
 // --- INTERFACE ---
