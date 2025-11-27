@@ -122,7 +122,7 @@ app.delete('/api/pacientes/:id', (req, res) => {
 app.post('/api/testar-envio', async (req, res) => {
     console.log("⚡ [TESTE] Tentando enviar...");
 
-    if (EMAIL_CLINICA === 'SEU_EMAIL_AQUI') {
+    if (EMAIL_CLINICA === 'medelleestetica@gmail.com') {
         return res.status(500).json({ erro: "Configure o e-mail/senha no código (linhas 26/27)!" });
     }
 
