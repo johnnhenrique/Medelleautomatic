@@ -1,9 +1,9 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO FINAL (FIX IPv4 REAL)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO FINAL (DESBLOQUEADA)
  * ---------------------------------------------------------
- * * SOLUÇÃO DEFINITIVA PARA TIMEOUT:
- * - Adicionado 'family: 4' para forçar conexão IPv4.
- * - Uso explícito da porta 587 com STARTTLS.
+ * * CORREÇÃO:
+ * - Removida a trava de segurança que impedia o envio com o e-mail da clínica.
+ * - Credenciais já configuradas no código.
  */
 
 const express = require('express');
@@ -23,37 +23,30 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ⚠️ CARREGAMENTO DE VARIÁVEIS
-// Mantenha seus dados aqui se preferir não usar variáveis de ambiente por enquanto
+// Seus dados já estão fixos aqui:
 const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
 const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
 // LOGS NO SERVIDOR
 console.log("========================================");
-console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (IPv4 FORCE)");
+console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (DESBLOQUEADO)");
 console.log("========================================");
-
-if (EMAIL_CLINICA === 'medelleestetica@gmail.com') {
-    console.error("❌ AVISO: Edite as linhas 26/27 com seu e-mail e senha!");
-} else {
-    console.log("✅ Credenciais carregadas.");
-}
+console.log("✅ Credenciais carregadas para: " + EMAIL_CLINICA);
 
 // --- CONFIGURAÇÃO ROBUSTA (IPV4 FORCE) ---
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // Host explícito do Gmail
-    port: 587,              // Porta padrão para submissão
-    secure: false,          // false para porta 587 (usa STARTTLS depois)
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // false para porta 587
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
     },
-    // 🔥 A CORREÇÃO MÁGICA ESTÁ AQUI EMBAIXO:
-    family: 4, // <--- FORÇA O USO DE IPv4 (Evita o timeout do IPv6 no Render)
+    family: 4, // Força IPv4 para evitar timeout
     tls: {
         rejectUnauthorized: false
     },
-    // Aumenta o tempo antes de desistir
-    connectionTimeout: 20000, // 20 segundos
+    connectionTimeout: 20000,
     greetingTimeout: 20000,
     socketTimeout: 20000
 });
@@ -61,10 +54,9 @@ const transporter = nodemailer.createTransport({
 // --- VERIFICAÇÃO IMEDIATA ---
 transporter.verify(function (error, success) {
     if (error) {
-        console.error("❌ FALHA NA CONEXÃO COM GMAIL:", error.code);
-        // Não mostramos o erro completo aqui para não poluir o log, mas o código já ajuda
+        console.error("❌ FALHA NA CONEXÃO COM GMAIL:", error);
     } else {
-        console.log("✅ CONEXÃO IPv4 COM GMAIL ESTABELECIDA!");
+        console.log("✅ CONEXÃO ESTABELECIDA! PRONTO PARA ENVIAR.");
     }
 });
 
@@ -122,20 +114,18 @@ app.delete('/api/pacientes/:id', (req, res) => {
 app.post('/api/testar-envio', async (req, res) => {
     console.log("⚡ [TESTE] Tentando enviar...");
 
-    if (EMAIL_CLINICA === 'medelleestetica@gmail.com') {
-        return res.status(500).json({ erro: "Configure o e-mail/senha no código (linhas 26/27)!" });
-    }
+    // REMOVI A TRAVA QUE BLOQUEAVA SEU E-MAIL AQUI
 
     try {
         const info = await transporter.sendMail({
-            from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
+            from: `"Medelle Sistema de Gestão de Clientes" <${EMAIL_CLINICA}>`,
             to: EMAIL_CLINICA,
-            subject: 'Teste Medelle (IPv4 Force)',
-            text: 'Se você recebeu isso, o problema de Timeout foi resolvido!'
+            subject: 'Teste Medelle (Sistema Desbloqueado)',
+            text: 'Sucesso! O sistema está configurado e enviando e-mails corretamente.'
         });
 
         console.log("✅ Enviado! ID: " + info.messageId);
-        res.json({ mensagem: "SUCESSO! Timeout resolvido." });
+        res.json({ mensagem: "SUCESSO! E-mail enviado corretamente." });
 
     } catch (error) {
         console.error("❌ Erro:", error);
@@ -145,7 +135,7 @@ app.post('/api/testar-envio', async (req, res) => {
 
 // --- AUTOMAÇÃO (CRON JOB) ---
 async function verificarEEnviarNotificacoes() {
-    if (EMAIL_CLINICA === 'medelleestetica@gmail.com') return console.log("⚠️ Automação pulada.");
+    // REMOVI A TRAVA DE AUTOMAÇÃO AQUI TAMBÉM
 
     console.log('⏰ Verificando 48h...');
     
