@@ -1,9 +1,9 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - MODO ESPIÃO (DEBUG)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO CORREÇÃO TIMEOUT (PORTA 587)
  * ---------------------------------------------------------
- * * OBJETIVO:
- * - Descobrir por que o e-mail está falhando no Render.
- * - O alerta na tela agora mostrará o erro cru do servidor.
+ * * SOLUÇÃO PARA ERRO "CONNECTION TIMEOUT":
+ * - Mudança para porta 587 (STARTTLS) que é mais compatível com o Render.
+ * - Adição de logs de debug detalhados no Nodemailer.
  */
 
 const express = require('express');
@@ -22,27 +22,48 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ⚠️ --- CARREGAMENTO DE VARIÁVEIS --- ⚠️
-// .trim() remove espaços em branco acidentais
+// ⚠️ CARREGAMENTO DE VARIÁVEIS
 const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
 const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
-// LOGS NO SERVIDOR (Para você ver no painel "Logs" do Render)
+// LOGS NO SERVIDOR
 console.log("========================================");
-console.log(" INICIANDO SERVIDOR MEDELLE");
-console.log("========================================");
-if (!EMAIL_CLINICA) console.log("❌ ERRO GRAVE: Variável EMAIL_CLINICA está vazia.");
-else console.log("✅ EMAIL_CLINICA detectado: " + EMAIL_CLINICA);
-
-if (!SENHA_APP) console.log("❌ ERRO GRAVE: Variável SENHA_APP está vazia.");
-else console.log("✅ SENHA_APP detectada (Tamanho: " + SENHA_APP.length + " caracteres)");
+console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (FIX 587)");
 console.log("========================================");
 
+if (!EMAIL_CLINICA || !SENHA_APP) {
+    console.error("❌ ERRO CRÍTICO: Variáveis de ambiente não encontradas.");
+} else {
+    console.log("✅ Credenciais detectadas.");
+}
+
+// --- CONFIGURAÇÃO ROBUSTA (PORTA 587 - ANTI-TIMEOUT) ---
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,            // <--- MUDANÇA CRÍTICA AQUI
+    secure: false,        // <--- False é obrigatório para porta 587
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
+    },
+    tls: {
+        rejectUnauthorized: false
+    },
+    // Configurações para evitar travamentos
+    connectionTimeout: 10000, // 10 segundos
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+    debug: true, // Mostra logs detalhados no painel do Render se der erro
+    logger: true 
+});
+
+// --- VERIFICAÇÃO IMEDIATA ---
+transporter.verify(function (error, success) {
+    if (error) {
+        console.error("❌ FALHA NA CONEXÃO COM GMAIL (VERIFY):");
+        console.error(error);
+    } else {
+        console.log("✅ CONEXÃO SMTP 587 ESTABELECIDA COM SUCESSO!");
     }
 });
 
@@ -96,43 +117,33 @@ app.delete('/api/pacientes/:id', (req, res) => {
     res.json({ success: true });
 });
 
-// --- ROTA DE TESTE (MODO ESPIÃO) ---
+// --- ROTA DE TESTE MANUAL ---
 app.post('/api/testar-envio', async (req, res) => {
-    console.log("⚡ [TESTE] Iniciando tentativa de envio...");
+    console.log("⚡ [TESTE MANUAL] Iniciando...");
 
-    // 1. Verifica se as variáveis existem
     if (!EMAIL_CLINICA || !SENHA_APP) {
-        console.error("❌ [TESTE] Variáveis ausentes.");
-        return res.status(500).json({ 
-            erro: "ERRO DE CONFIGURAÇÃO: As variáveis EMAIL_CLINICA ou SENHA_APP não foram encontradas no Render. Verifique a aba Environment." 
-        });
+        return res.status(500).json({ erro: "Variáveis de ambiente não configuradas." });
     }
 
     try {
-        // 2. Tenta enviar
         const info = await transporter.sendMail({
-            from: `"Medelle Debug" <${EMAIL_CLINICA}>`,
+            from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
             to: EMAIL_CLINICA,
-            subject: 'Teste de Configuração - Medelle (Cloud)',
-            text: 'Seu sistema na nuvem está enviando e-mails corretamente! Variáveis carregadas com sucesso.'
+            subject: 'Teste de Configuração - Medelle (Porta 587)',
+            text: 'Seu sistema na nuvem conectou com sucesso via porta 587!'
         });
 
-        console.log("✅ [TESTE] Sucesso! ID da mensagem: " + info.messageId);
-        res.json({ mensagem: "SUCESSO TOTAL! O e-mail foi enviado." });
+        console.log("✅ E-mail enviado! ID: " + info.messageId);
+        res.json({ mensagem: "SUCESSO! E-mail enviado via porta 587." });
 
     } catch (error) {
-        console.error("❌ [TESTE] Erro capturado do Nodemailer:", error);
-        
-        // AQUI ESTÁ O SEGREDO: Enviamos o erro exato para o frontend
-        const mensagemErro = error.message || JSON.stringify(error);
-        
-        res.status(500).json({ 
-            erro: "ERRO TÉCNICO DO GOOGLE:\n" + mensagemErro 
-        });
+        console.error("❌ Erro no envio:", error);
+        // Retorna o erro detalhado para o alerta
+        res.status(500).json({ erro: "ERRO SMTP: " + (error.message || JSON.stringify(error)) });
     }
 });
 
-// --- LÓGICA DE NOTIFICAÇÃO ---
+// --- AUTOMAÇÃO (CRON JOB) ---
 async function verificarEEnviarNotificacoes() {
     if (!EMAIL_CLINICA || !SENHA_APP) return console.log("⚠️ Automação pulada: Credenciais ausentes.");
 
@@ -183,7 +194,7 @@ app.listen(PORT, () => {
     console.log("♻️  Banco reiniciado.");
 });
 
-// --- INTERFACE (COM VISUALIZAÇÃO DE ERRO MELHORADA) ---
+// --- INTERFACE ---
 const FRONTEND_HTML = `
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -253,15 +264,13 @@ const FRONTEND_HTML = `
                 const res = await fetch('/api/testar-envio', { method: 'POST' }); 
                 const data = await res.json(); 
                 
-                // --- ALERTA INTELIGENTE ---
                 if (res.ok) {
                     alert('✅ ' + data.mensagem);
                 } else {
-                    // Aqui ele vai mostrar o erro REAL vindo do backend
-                    alert('❌ ATENÇÃO - ERRO ENCONTRADO:\\n\\n' + (data.erro || 'Erro desconhecido'));
+                    alert('❌ ERRO:\\n' + (data.erro || 'Erro desconhecido'));
                 }
             } catch(e) { 
-                alert("❌ O Site parece estar offline ou reiniciando. Tente novamente em 1 minuto."); 
+                alert("❌ Erro ao conectar com o servidor."); 
             }
         }
 
