@@ -1,13 +1,5 @@
 [
   {
-    "name": "JONATHAM HENRIQUE FARIAS PEREIRA",
-    "contact": "61993467873",
-    "email": "johnnhenrique@gmail.com",
-    "procedure": "BOTOX",
-    "returnDate": "2025-11-27",
-    "id": 1764206015631
-  },
-  {
     "name": "ROSANE ABREU MEDEIROS",
     "contact": "61991195557",
     "email": "rosanemedeiroz@gmail.com",
@@ -22,13 +14,5 @@
     "procedure": "TRATAMENTO CAPILAR",
     "returnDate": "2025-11-28",
     "id": 1764206375917
-  },
-  {
-    "name": "JONATHAM HENRIQUE FARIAS PEREIRA",
-    "contact": "61993467873",
-    "email": "johnnhenrique@gmail.com",
-    "procedure": "BOTOX",
-    "returnDate": "2025-11-26",
-    "id": 1764207808168
   }
 ]

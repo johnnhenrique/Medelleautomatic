@@ -294,7 +294,7 @@ const FRONTEND_HTML = `
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             });
-            alert('Salvo!'); form.reset(); loadPatients();
+            alert('Retorno cadastrado com sucesso!'); form.reset(); loadPatients();
         });
 
         async function loadPatients() {
