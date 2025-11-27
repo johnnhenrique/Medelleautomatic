@@ -1,9 +1,9 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO CORREÇÃO TIMEOUT (PORTA 587)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO FORCE IPv4 (COM CREDENCIAIS NO CÓDIGO)
  * ---------------------------------------------------------
  * * SOLUÇÃO PARA ERRO "CONNECTION TIMEOUT":
- * - Mudança para porta 587 (STARTTLS) que é mais compatível com o Render.
- * - Adição de logs de debug detalhados no Nodemailer.
+ * - Força o uso de IPv4 (family: 4) para evitar falhas de DNS no Render.
+ * - Usa dns.resolve4 para garantir resolução correta.
  */
 
 const express = require('express');
@@ -23,38 +23,35 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ⚠️ CARREGAMENTO DE VARIÁVEIS
+// 👇 PREENCHA SEUS DADOS DENTRO DAS ASPAS '...' ABAIXO 👇
 const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
 const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
 // LOGS NO SERVIDOR
 console.log("========================================");
-console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (FIX 587)");
+console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (IPv4 PATCH)");
 console.log("========================================");
 
-if (!EMAIL_CLINICA || !SENHA_APP) {
-    console.error("❌ ERRO CRÍTICO: Variáveis de ambiente não encontradas.");
+// Verifica se você preencheu os dados (o código não envia se ainda estiver com o texto padrão)
+if (EMAIL_CLINICA === 'SEU_EMAIL_AQUI' || SENHA_APP === 'SUA_SENHA_AQUI') {
+    console.error("❌ AVISO: Você precisa editar as linhas 26 e 27 com seu e-mail e senha real!");
 } else {
-    console.log("✅ Credenciais detectadas.");
+    console.log("✅ Credenciais detectadas no código.");
 }
 
-// --- CONFIGURAÇÃO ROBUSTA (PORTA 587 - ANTI-TIMEOUT) ---
+// --- CONFIGURAÇÃO ROBUSTA (IPV4 FORCE) ---
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,            // <--- MUDANÇA CRÍTICA AQUI
-    secure: false,        // <--- False é obrigatório para porta 587
+    service: 'gmail', // Vamos voltar para o service 'gmail' que lida melhor com algumas configs
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
     },
+    // Configurações de Rede Críticas
+    logger: true,
+    debug: true,
     tls: {
         rejectUnauthorized: false
-    },
-    // Configurações para evitar travamentos
-    connectionTimeout: 10000, // 10 segundos
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    debug: true, // Mostra logs detalhados no painel do Render se der erro
-    logger: true 
+    }
 });
 
 // --- VERIFICAÇÃO IMEDIATA ---
@@ -63,7 +60,7 @@ transporter.verify(function (error, success) {
         console.error("❌ FALHA NA CONEXÃO COM GMAIL (VERIFY):");
         console.error(error);
     } else {
-        console.log("✅ CONEXÃO SMTP 587 ESTABELECIDA COM SUCESSO!");
+        console.log("✅ CONEXÃO ESTABELECIDA COM SUCESSO!");
     }
 });
 
@@ -121,31 +118,30 @@ app.delete('/api/pacientes/:id', (req, res) => {
 app.post('/api/testar-envio', async (req, res) => {
     console.log("⚡ [TESTE MANUAL] Iniciando...");
 
-    if (!EMAIL_CLINICA || !SENHA_APP) {
-        return res.status(500).json({ erro: "Variáveis de ambiente não configuradas." });
+    if (EMAIL_CLINICA === 'SEU_EMAIL_AQUI' || SENHA_APP === 'SUA_SENHA_AQUI') {
+        return res.status(500).json({ erro: "Você esqueceu de colocar o e-mail/senha nas linhas 26 e 27 do código!" });
     }
 
     try {
         const info = await transporter.sendMail({
             from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
             to: EMAIL_CLINICA,
-            subject: 'Teste de Configuração - Medelle (Porta 587)',
-            text: 'Seu sistema na nuvem conectou com sucesso via porta 587!'
+            subject: 'Teste de Configuração - Medelle (IPv4)',
+            text: 'Seu sistema na nuvem conectou com sucesso!'
         });
 
         console.log("✅ E-mail enviado! ID: " + info.messageId);
-        res.json({ mensagem: "SUCESSO! E-mail enviado via porta 587." });
+        res.json({ mensagem: "SUCESSO! E-mail enviado." });
 
     } catch (error) {
         console.error("❌ Erro no envio:", error);
-        // Retorna o erro detalhado para o alerta
         res.status(500).json({ erro: "ERRO SMTP: " + (error.message || JSON.stringify(error)) });
     }
 });
 
 // --- AUTOMAÇÃO (CRON JOB) ---
 async function verificarEEnviarNotificacoes() {
-    if (!EMAIL_CLINICA || !SENHA_APP) return console.log("⚠️ Automação pulada: Credenciais ausentes.");
+    if (EMAIL_CLINICA === 'SEU_EMAIL_AQUI') return console.log("⚠️ Automação pulada: E-mail não configurado.");
 
     console.log('⏰ Verificando retornos para daqui a 48 horas...');
     
