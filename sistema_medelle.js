@@ -1,10 +1,9 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO CORREÇÃO FINAL
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO RAILWAY
  * ---------------------------------------------------------
- * * O QUE MUDOU:
- * - Removido 'ciphers: SSLv3' (Isso estava bloqueando a conexão com Gmail moderno).
- * - Volta ao uso de 'service: gmail' (Configuração automática otimizada).
- * - Mantido 'family: 4' para estabilidade de rede.
+ * * AJUSTES:
+ * - Código limpo e otimizado para o Railway.
+ * - Mantida a segurança de conexão do Gmail.
  */
 
 const express = require('express');
@@ -16,48 +15,36 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_FILE = path.join(__dirname, 'banco_dados.json');
+// No Railway, o disco é efêmero, então usamos um arquivo temporário
+// (Para produção real no futuro, recomendaria conectar um Banco MongoDB)
+const DB_FILE = '/tmp/banco_dados.json'; 
 
 // --- CONFIGURAÇÕES ---
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ⚠️ CREDENCIAIS (EDITÁVEIS AQUI)
-const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
-const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
+// ⚠️ CREDENCIAIS
+// O Railway injetará isso automaticamente se configurado no painel
+const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || '').trim();
+const SENHA_APP = (process.env.SENHA_APP || '').trim();
 
 // LOGS
 console.log("========================================");
-console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (FIX TLS)");
+console.log(" 🚀 INICIANDO SISTEMA NO RAILWAY");
 console.log("========================================");
 
-// --- CONFIGURAÇÃO OTIMIZADA PARA GMAIL ---
+// --- CONFIGURAÇÃO GMAIL ---
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Deixa o Nodemailer escolher a melhor porta/segurança
+    service: 'gmail',
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
-    },
-    // Força IPv4 (Essencial no Render)
-    family: 4, 
-    // Aceita certificados auto-assinados se necessário, mas usa TLS moderno
-    tls: {
-        rejectUnauthorized: false
-    }
-});
-
-// --- VERIFICAÇÃO NA INICIALIZAÇÃO ---
-transporter.verify(function (error, success) {
-    if (error) {
-        console.error("❌ AVISO: Falha na conexão inicial com Gmail.");
-        console.error(error);
-    } else {
-        console.log("✅ CONEXÃO GMAIL OK! PRONTO PARA USO.");
     }
 });
 
 // --- FUNÇÕES DE BANCO DE DADOS ---
+// Ajustadas para usar /tmp no linux (evita erros de permissão)
 const lerBanco = () => {
     try {
         if (!fs.existsSync(DB_FILE)) return [];
@@ -74,10 +61,6 @@ const salvarBanco = (dados) => {
 
 app.get('/', (req, res) => {
     res.send(FRONTEND_HTML);
-});
-
-app.get('/ping', (req, res) => {
-    res.send('Pong! Servidor online.');
 });
 
 app.get('/api/pacientes', (req, res) => {
@@ -109,44 +92,38 @@ app.delete('/api/pacientes/:id', (req, res) => {
 
 // --- ROTA DE TESTE MANUAL ---
 app.post('/api/testar-envio', async (req, res) => {
-    console.log("⚡ [TESTE] Enviando...");
+    console.log("⚡ [TESTE] Solicitado...");
+
+    if (!EMAIL_CLINICA || !SENHA_APP) {
+        return res.status(500).json({ erro: "Configure as variáveis EMAIL_CLINICA e SENHA_APP no painel do Railway." });
+    }
 
     try {
-        const info = await transporter.sendMail({
+        await transporter.sendMail({
             from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
             to: EMAIL_CLINICA,
-            subject: 'Teste Medelle (Configuração Moderna)',
-            text: 'Se você recebeu isso, a conexão TLS funcionou perfeitamente!'
+            subject: 'Teste de Sistema (Railway)',
+            text: 'O sistema Medelle está funcionando perfeitamente no novo servidor!'
         });
-
-        console.log("✅ Enviado! ID: " + info.messageId);
-        res.json({ mensagem: "SUCESSO! E-mail enviado." });
-
+        res.json({ mensagem: "E-mail enviado com sucesso!" });
     } catch (error) {
-        console.error("❌ Erro no teste:", error);
-        
-        let msg = error.message;
-        // Traduz erros comuns
-        if(error.code === 'EAUTH') msg = "Senha de App ou E-mail incorretos. Verifique as credenciais.";
-        if(error.code === 'ETIMEDOUT') msg = "O Gmail demorou para responder. Tente novamente em 1 minuto.";
-        
-        res.status(500).json({ erro: msg });
+        console.error("❌ Erro:", error);
+        res.status(500).json({ erro: "Erro no envio: " + error.message });
     }
 });
 
 // --- AUTOMAÇÃO (CRON JOB) ---
 async function verificarEEnviarNotificacoes() {
-    console.log('⏰ Verificando 48h...');
-    
+    console.log('⏰ Verificando agendamentos...');
+    if (!EMAIL_CLINICA) return;
+
     const hoje = new Date();
-    hoje.setHours(hoje.getHours() - 3); 
+    hoje.setHours(hoje.getHours() - 3); // Fuso horário BR
 
     const alvo = new Date(hoje);
-    alvo.setDate(hoje.getDate() + 2); 
+    alvo.setDate(hoje.getDate() + 2); // +2 dias (48h)
     const dataAlvoString = alvo.toISOString().split('T')[0];
     
-    console.log(`🔎 Buscando para: ${dataAlvoString}`);
-
     const pacientes = lerBanco();
     
     for (const p of pacientes) {
@@ -169,9 +146,9 @@ async function enviarEmailPaciente(p) {
             subject: 'Lembrete: Retorno em 48h - Medelle',
             text: corpoEmail
         });
-        console.log(`✅ Enviado para ${p.email}`);
+        console.log(`✅ Aviso enviado para ${p.name}`);
     } catch (error) {
-        console.error(`❌ Erro no envio para ${p.name}:`, error);
+        console.error(`❌ Falha no envio para ${p.name}`);
     }
 }
 
@@ -179,8 +156,8 @@ cron.schedule('0 9 * * *', verificarEEnviarNotificacoes);
 
 app.listen(PORT, () => {
     console.log(`\n💎 MEDELLE ESTÉTICA - ONLINE NA PORTA ${PORT}`);
+    // Inicia banco vazio
     salvarBanco([]); 
-    console.log("♻️  Banco reiniciado.");
 });
 
 // --- INTERFACE ---
@@ -248,7 +225,7 @@ const FRONTEND_HTML = `
         document.addEventListener('DOMContentLoaded', loadPatients);
         
         async function testarEnvio() {
-            if(!confirm("Deseja fazer um teste de envio agora?")) return;
+            if(!confirm("Testar envio de e-mail?")) return;
             try { 
                 const res = await fetch('/api/testar-envio', { method: 'POST' }); 
                 const data = await res.json(); 
@@ -256,9 +233,7 @@ const FRONTEND_HTML = `
                 if (res.ok) {
                     alert('✅ ' + data.mensagem);
                 } else {
-                    let erroMsg = data.erro;
-                    if (typeof erroMsg === 'object') erroMsg = JSON.stringify(erroMsg, null, 2);
-                    alert('❌ ERRO:\\n' + erroMsg);
+                    alert('❌ ERRO:\\n' + (data.erro || 'Erro desconhecido'));
                 }
             } catch(e) { 
                 alert("❌ Erro ao conectar com o servidor."); 
