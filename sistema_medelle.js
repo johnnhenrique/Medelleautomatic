@@ -1,10 +1,10 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO FINAL (CLEAN SMTP 587)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO CORREÇÃO FINAL
  * ---------------------------------------------------------
- * * AJUSTE FINAL:
- * - Uso da porta 587 pura (sem configurações complexas de timeout que podem travar).
- * - Remoção de 'service: gmail' para evitar conflitos internos.
- * - Foco total em estabilidade de conexão.
+ * * O QUE MUDOU:
+ * - Removido 'ciphers: SSLv3' (Isso estava bloqueando a conexão com Gmail moderno).
+ * - Volta ao uso de 'service: gmail' (Configuração automática otimizada).
+ * - Mantido 'family: 4' para estabilidade de rede.
  */
 
 const express = require('express');
@@ -23,39 +23,37 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ⚠️ CREDENCIAIS
+// ⚠️ CREDENCIAIS (EDITÁVEIS AQUI)
 const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
 const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
 // LOGS
 console.log("========================================");
-console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (PORTA 587)");
+console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (FIX TLS)");
 console.log("========================================");
 
-// --- CONFIGURAÇÃO LIMPA (SMTP 587) ---
-// Esta é a configuração mais compatível com firewalls de nuvem
+// --- CONFIGURAÇÃO OTIMIZADA PARA GMAIL ---
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // OBRIGATÓRIO ser false para porta 587
+    service: 'gmail', // Deixa o Nodemailer escolher a melhor porta/segurança
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
     },
+    // Força IPv4 (Essencial no Render)
+    family: 4, 
+    // Aceita certificados auto-assinados se necessário, mas usa TLS moderno
     tls: {
-        rejectUnauthorized: false,
-        ciphers: 'SSLv3' // Força compatibilidade máxima
+        rejectUnauthorized: false
     }
 });
 
 // --- VERIFICAÇÃO NA INICIALIZAÇÃO ---
 transporter.verify(function (error, success) {
     if (error) {
-        console.error("❌ AVISO: O Nodemailer não conseguiu conectar na inicialização.");
-        console.error("Erro:", error.code);
-        console.error("Motivo:", error.message);
+        console.error("❌ AVISO: Falha na conexão inicial com Gmail.");
+        console.error(error);
     } else {
-        console.log("✅ CONEXÃO SMTP 587 OK! PRONTO PARA ENVIO.");
+        console.log("✅ CONEXÃO GMAIL OK! PRONTO PARA USO.");
     }
 });
 
@@ -111,14 +109,14 @@ app.delete('/api/pacientes/:id', (req, res) => {
 
 // --- ROTA DE TESTE MANUAL ---
 app.post('/api/testar-envio', async (req, res) => {
-    console.log("⚡ [TESTE] Tentando enviar via Porta 587...");
+    console.log("⚡ [TESTE] Enviando...");
 
     try {
         const info = await transporter.sendMail({
             from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
             to: EMAIL_CLINICA,
-            subject: 'Teste Medelle (Porta 587)',
-            text: 'Se você recebeu isso, a porta 587 funcionou!'
+            subject: 'Teste Medelle (Configuração Moderna)',
+            text: 'Se você recebeu isso, a conexão TLS funcionou perfeitamente!'
         });
 
         console.log("✅ Enviado! ID: " + info.messageId);
@@ -127,9 +125,10 @@ app.post('/api/testar-envio', async (req, res) => {
     } catch (error) {
         console.error("❌ Erro no teste:", error);
         
-        // Formata o erro para leitura fácil
         let msg = error.message;
-        if(error.code === 'ETIMEDOUT') msg = "O servidor do Render demorou demais para responder (Timeout). Tente novamente em 1 minuto.";
+        // Traduz erros comuns
+        if(error.code === 'EAUTH') msg = "Senha de App ou E-mail incorretos. Verifique as credenciais.";
+        if(error.code === 'ETIMEDOUT') msg = "O Gmail demorou para responder. Tente novamente em 1 minuto.";
         
         res.status(500).json({ erro: msg });
     }
