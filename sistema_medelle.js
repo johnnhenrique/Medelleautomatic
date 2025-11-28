@@ -1,10 +1,10 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO FINAL (CONEXÃO ÚNICA)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO GOOGLEMAIL (FIX DE REDE)
  * ---------------------------------------------------------
- * * ESTRATÉGIA ANTI-TIMEOUT:
- * - Pool: FALSE (Cria conexão nova para cada envio -> Mais estável).
- * - Timeout: 60 segundos (Tolerância máxima).
- * - DNS Lookup: Diagnóstico de rede antes do envio.
+ * * MUDANÇA ESTRATÉGICA:
+ * - Troca do host para 'smtp.googlemail.com' (Endereço alternativo).
+ * - Volta para Porta 587 (Padrão mais aceito).
+ * - Adição de rota de diagnóstico de rede (/api/diagnostico).
  */
 
 const express = require('express');
@@ -13,7 +13,7 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
-const dns = require('dns'); // Para diagnóstico de rede
+const dns = require('dns');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,34 +24,35 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ⚠️ CREDENCIAIS
+// ⚠️ CREDENCIAIS PADRÃO
 const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
 const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
 // LOGS
 console.log("========================================");
-console.log(" 🚀 INICIANDO NO RAILWAY (CONEXÃO ÚNICA)");
+console.log(" 🚀 INICIANDO NO RAILWAY (GOOGLEMAIL FIX)");
 console.log("========================================");
 
-// --- CONFIGURAÇÃO MANUAL BLINDADA (SEM POOL) ---
+// --- CONFIGURAÇÃO COM HOST ALTERNATIVO ---
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465, // SSL Direto (Geralmente passa melhor que o 587 em conexões únicas)
-    secure: true, 
+    service: 'gmail', // O 'service: gmail' usa configurações internas otimizadas
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
     },
-    pool: false, // <--- DESATIVADO: Cria uma conexão nova a cada envio (evita travamento)
-    family: 4,   // Força IPv4
-    
-    // Configurações de paciência extrema
-    connectionTimeout: 60000, // 60 segundos de tolerância
-    greetingTimeout: 30000,   // 30 segundos esperando o "Olá" do Google
-    socketTimeout: 60000,
-    
-    tls: {
-        rejectUnauthorized: false
+    // Força IPv4 (Essencial)
+    family: 4, 
+    // Debug
+    logger: true,
+    debug: true
+});
+
+// --- VERIFICAÇÃO NA INICIALIZAÇÃO ---
+transporter.verify(function (error, success) {
+    if (error) {
+        console.error("❌ AVISO: Conexão inicial falhou (Pode ser normal se o Railway estiver bloqueando o boot).");
+    } else {
+        console.log("✅ CONEXÃO SMTP OK!");
     }
 });
 
@@ -72,6 +73,14 @@ const salvarBanco = (dados) => {
 
 app.get('/', (req, res) => {
     res.send(FRONTEND_HTML);
+});
+
+// Rota para verificar se o servidor tem internet
+app.get('/api/diagnostico', (req, res) => {
+    dns.lookup('google.com', (err) => {
+        if (err) res.json({ status: "SEM INTERNET", erro: err.code });
+        else res.json({ status: "ONLINE", mensagem: "O servidor consegue acessar a internet." });
+    });
 });
 
 app.get('/api/pacientes', (req, res) => {
@@ -103,45 +112,43 @@ app.delete('/api/pacientes/:id', (req, res) => {
 
 // --- ROTA DE TESTE MANUAL ---
 app.post('/api/testar-envio', async (req, res) => {
-    console.log("⚡ [TESTE] Iniciando diagnóstico de rede...");
+    console.log("⚡ [TESTE] Tentando enviar via googlemail...");
 
-    // 1. Diagnóstico de DNS (Verifica se o Railway consegue ver o Google)
-    dns.resolve4('smtp.gmail.com', async (err, addresses) => {
-        if (err) {
-            console.error("❌ ERRO DE DNS: O servidor não encontrou o Gmail.", err);
-            return res.status(500).json({ erro: "ERRO DE REDE: O servidor não consegue conectar à internet." });
-        }
+    try {
+        // Tenta enviar com configuração forçada no ato do envio
+        const info = await transporter.sendMail({
+            from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
+            to: EMAIL_CLINICA,
+            subject: 'Teste Medelle (Host Alternativo)',
+            text: 'Se você recebeu isso, o host alternativo funcionou!',
+        });
+
+        console.log("✅ Enviado! ID: " + info.messageId);
+        res.json({ mensagem: "SUCESSO! E-mail enviado." });
+
+    } catch (error) {
+        console.error("❌ Erro no teste:", error);
         
-        console.log(`✅ DNS Resolvido: smtp.gmail.com está em ${addresses[0]}`);
-        console.log("⚡ Tentando autenticação SMTP...");
-
-        try {
-            await transporter.sendMail({
-                from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
-                to: EMAIL_CLINICA,
-                subject: 'Teste Medelle (Modo Conexão Única)',
-                text: 'Se você recebeu isso, desligar o Pool resolveu o problema!'
-            });
-            res.json({ mensagem: "E-mail enviado com sucesso!" });
-        } catch (error) {
-            console.error("❌ Erro no envio:", error);
-            res.status(500).json({ erro: "Erro SMTP: " + (error.code || error.message) });
-        }
-    });
+        let msg = error.message;
+        if(error.code === 'ETIMEDOUT') msg = "Timeout de conexão. O Railway não conseguiu falar com o Google.";
+        
+        res.status(500).json({ erro: msg });
+    }
 });
 
 // --- AUTOMAÇÃO (CRON JOB) ---
 async function verificarEEnviarNotificacoes() {
-    console.log('⏰ Verificando agendamentos...');
-    if (!EMAIL_CLINICA) return;
-
+    console.log('⏰ Verificando 48h...');
+    
     const hoje = new Date();
-    hoje.setHours(hoje.getHours() - 3);
+    hoje.setHours(hoje.getHours() - 3); 
 
     const alvo = new Date(hoje);
-    alvo.setDate(hoje.getDate() + 2);
+    alvo.setDate(hoje.getDate() + 2); 
     const dataAlvoString = alvo.toISOString().split('T')[0];
     
+    console.log(`🔎 Buscando para: ${dataAlvoString}`);
+
     const pacientes = lerBanco();
     
     for (const p of pacientes) {
@@ -164,9 +171,9 @@ async function enviarEmailPaciente(p) {
             subject: 'Lembrete: Retorno em 48h - Medelle',
             text: corpoEmail
         });
-        console.log(`✅ Aviso enviado para ${p.name}`);
+        console.log(`✅ Enviado para ${p.email}`);
     } catch (error) {
-        console.error(`❌ Falha no envio para ${p.name}`);
+        console.error(`❌ Erro no envio para ${p.name}:`, error);
     }
 }
 
@@ -250,7 +257,9 @@ const FRONTEND_HTML = `
                 if (res.ok) {
                     alert('✅ ' + data.mensagem);
                 } else {
-                    alert('❌ ERRO:\\n' + (data.erro || 'Erro desconhecido'));
+                    let erroMsg = data.erro;
+                    if (typeof erroMsg === 'object') erroMsg = JSON.stringify(erroMsg, null, 2);
+                    alert('❌ ERRO:\\n' + erroMsg);
                 }
             } catch(e) { 
                 alert("❌ Erro ao conectar com o servidor."); 
