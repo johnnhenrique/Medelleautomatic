@@ -1,9 +1,9 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO RAILWAY
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO RAILWAY (PORTA 465 SSL + CREDENCIAIS PADRÃO)
  * ---------------------------------------------------------
- * * AJUSTES:
- * - Código limpo e otimizado para o Railway.
- * - Mantida a segurança de conexão do Gmail.
+ * * ATUALIZAÇÃO:
+ * - Credenciais de e-mail e senha definidas como padrão no código.
+ * - Mantida a configuração de Porta 465 (SSL) + IPv4.
  */
 
 const express = require('express');
@@ -15,8 +15,7 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-// No Railway, o disco é efêmero, então usamos um arquivo temporário
-// (Para produção real no futuro, recomendaria conectar um Banco MongoDB)
+// Arquivo temporário para o Railway (resetado a cada deploy)
 const DB_FILE = '/tmp/banco_dados.json'; 
 
 // --- CONFIGURAÇÕES ---
@@ -24,27 +23,32 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ⚠️ CREDENCIAIS
-// O Railway injetará isso automaticamente se configurado no painel
+// ⚠️ CREDENCIAIS (Configuradas como padrão)
+// Se não houver variável de ambiente, usa estas strings fixas:
 const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
 const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
 // LOGS
 console.log("========================================");
-console.log(" 🚀 INICIANDO SISTEMA NO RAILWAY");
+console.log(" 🚀 INICIANDO NO RAILWAY (SSL 465)");
+console.log(` 📧 E-mail configurado: ${EMAIL_CLINICA}`);
 console.log("========================================");
 
-// --- CONFIGURAÇÃO GMAIL ---
+// --- CONFIGURAÇÃO MANUAL BLINDADA (PORTA 465) ---
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com', // Endereço exato do Gmail
+    port: 465,              // Porta segura (SSL)
+    secure: true,           // TRUE é obrigatório para porta 465
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
-    }
+    },
+    family: 4, // Força IPv4 (Crucial para evitar timeouts de DNS)
+    logger: true, // Habilita logs detalhados no console do Railway
+    debug: true   // Mostra o handshake SMTP
 });
 
 // --- FUNÇÕES DE BANCO DE DADOS ---
-// Ajustadas para usar /tmp no linux (evita erros de permissão)
 const lerBanco = () => {
     try {
         if (!fs.existsSync(DB_FILE)) return [];
@@ -94,16 +98,12 @@ app.delete('/api/pacientes/:id', (req, res) => {
 app.post('/api/testar-envio', async (req, res) => {
     console.log("⚡ [TESTE] Solicitado...");
 
-    if (!EMAIL_CLINICA || !SENHA_APP) {
-        return res.status(500).json({ erro: "Configure as variáveis EMAIL_CLINICA e SENHA_APP no painel do Railway." });
-    }
-
     try {
         await transporter.sendMail({
             from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
             to: EMAIL_CLINICA,
-            subject: 'Teste de Sistema (Railway)',
-            text: 'O sistema Medelle está funcionando perfeitamente no novo servidor!'
+            subject: 'Teste de Sistema (Railway Porta 465)',
+            text: 'O sistema Medelle conectou via SSL com sucesso usando as credenciais padrão!'
         });
         res.json({ mensagem: "E-mail enviado com sucesso!" });
     } catch (error) {
@@ -115,8 +115,7 @@ app.post('/api/testar-envio', async (req, res) => {
 // --- AUTOMAÇÃO (CRON JOB) ---
 async function verificarEEnviarNotificacoes() {
     console.log('⏰ Verificando agendamentos...');
-    if (!EMAIL_CLINICA) return;
-
+    
     const hoje = new Date();
     hoje.setHours(hoje.getHours() - 3); // Fuso horário BR
 
@@ -156,7 +155,6 @@ cron.schedule('0 9 * * *', verificarEEnviarNotificacoes);
 
 app.listen(PORT, () => {
     console.log(`\n💎 MEDELLE ESTÉTICA - ONLINE NA PORTA ${PORT}`);
-    // Inicia banco vazio
     salvarBanco([]); 
 });
 
