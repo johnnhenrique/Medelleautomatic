@@ -1,10 +1,10 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - TENTATIVA FINAL RAILWAY (PORTA 587)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO FINAL (CONEXÃO ÚNICA)
  * ---------------------------------------------------------
- * * MUDANÇA DE ESTRATÉGIA:
- * - Voltamos para a Porta 587 (STARTTLS).
- * - Secure: FALSE (Obrigatório para 587).
- * - Adicionamos 'keepAlive' para tentar manter o canal aberto.
+ * * ESTRATÉGIA ANTI-TIMEOUT:
+ * - Pool: FALSE (Cria conexão nova para cada envio -> Mais estável).
+ * - Timeout: 60 segundos (Tolerância máxima).
+ * - DNS Lookup: Diagnóstico de rede antes do envio.
  */
 
 const express = require('express');
@@ -13,6 +13,7 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const dns = require('dns'); // Para diagnóstico de rede
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,36 +30,28 @@ const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
 // LOGS
 console.log("========================================");
-console.log(" 🚀 INICIANDO NO RAILWAY (PORTA 587)");
+console.log(" 🚀 INICIANDO NO RAILWAY (CONEXÃO ÚNICA)");
 console.log("========================================");
 
-// --- CONFIGURAÇÃO (PORTA 587 - O PADRÃO DA WEB) ---
+// --- CONFIGURAÇÃO MANUAL BLINDADA (SEM POOL) ---
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // OBRIGATÓRIO: false para porta 587
+    port: 465, // SSL Direto (Geralmente passa melhor que o 587 em conexões únicas)
+    secure: true, 
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
     },
-    family: 4, // Força IPv4 (Anti-timeout)
-    // Opções extras de rede para tentar furar o bloqueio
-    pool: true,       // Usa conexão em pool para ser mais robusto
-    maxConnections: 1,
-    rateLimit: 1,     // Limita velocidade para não parecer spam
+    pool: false, // <--- DESATIVADO: Cria uma conexão nova a cada envio (evita travamento)
+    family: 4,   // Força IPv4
+    
+    // Configurações de paciência extrema
+    connectionTimeout: 60000, // 60 segundos de tolerância
+    greetingTimeout: 30000,   // 30 segundos esperando o "Olá" do Google
+    socketTimeout: 60000,
+    
     tls: {
         rejectUnauthorized: false
-    }
-});
-
-// --- VERIFICAÇÃO ---
-transporter.verify(function (error, success) {
-    if (error) {
-        console.error("❌ FALHA DE CONEXÃO INICIAL (587):");
-        // Não mostramos o erro inteiro para não poluir, mas o código é vital
-        console.error(error.code || error);
-    } else {
-        console.log("✅ CONEXÃO SMTP 587 SUCESSO!");
     }
 });
 
@@ -110,33 +103,43 @@ app.delete('/api/pacientes/:id', (req, res) => {
 
 // --- ROTA DE TESTE MANUAL ---
 app.post('/api/testar-envio', async (req, res) => {
-    console.log("⚡ [TESTE] Solicitado (Porta 587)...");
+    console.log("⚡ [TESTE] Iniciando diagnóstico de rede...");
 
-    try {
-        const info = await transporter.sendMail({
-            from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
-            to: EMAIL_CLINICA,
-            subject: 'Teste de Sistema (Railway Porta 587)',
-            text: 'Se este e-mail chegou, a Porta 587 é a solução para o Railway!'
-        });
+    // 1. Diagnóstico de DNS (Verifica se o Railway consegue ver o Google)
+    dns.resolve4('smtp.gmail.com', async (err, addresses) => {
+        if (err) {
+            console.error("❌ ERRO DE DNS: O servidor não encontrou o Gmail.", err);
+            return res.status(500).json({ erro: "ERRO DE REDE: O servidor não consegue conectar à internet." });
+        }
         
-        console.log("✅ E-mail enviado! ID:", info.messageId);
-        res.json({ mensagem: "SUCESSO! E-mail enviado." });
-    } catch (error) {
-        console.error("❌ Erro:", error);
-        res.status(500).json({ erro: "Erro no envio: " + (error.code || error.message) });
-    }
+        console.log(`✅ DNS Resolvido: smtp.gmail.com está em ${addresses[0]}`);
+        console.log("⚡ Tentando autenticação SMTP...");
+
+        try {
+            await transporter.sendMail({
+                from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
+                to: EMAIL_CLINICA,
+                subject: 'Teste Medelle (Modo Conexão Única)',
+                text: 'Se você recebeu isso, desligar o Pool resolveu o problema!'
+            });
+            res.json({ mensagem: "E-mail enviado com sucesso!" });
+        } catch (error) {
+            console.error("❌ Erro no envio:", error);
+            res.status(500).json({ erro: "Erro SMTP: " + (error.code || error.message) });
+        }
+    });
 });
 
 // --- AUTOMAÇÃO (CRON JOB) ---
 async function verificarEEnviarNotificacoes() {
     console.log('⏰ Verificando agendamentos...');
-    
+    if (!EMAIL_CLINICA) return;
+
     const hoje = new Date();
-    hoje.setHours(hoje.getHours() - 3); // Fuso horário BR
+    hoje.setHours(hoje.getHours() - 3);
 
     const alvo = new Date(hoje);
-    alvo.setDate(hoje.getDate() + 2); // +2 dias (48h)
+    alvo.setDate(hoje.getDate() + 2);
     const dataAlvoString = alvo.toISOString().split('T')[0];
     
     const pacientes = lerBanco();
