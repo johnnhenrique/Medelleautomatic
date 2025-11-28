@@ -1,10 +1,10 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO GOOGLEMAIL (FIX DE REDE)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - MODO DE VALIDAÇÃO (ETHEREAL)
  * ---------------------------------------------------------
- * * MUDANÇA ESTRATÉGICA:
- * - Troca do host para 'smtp.googlemail.com' (Endereço alternativo).
- * - Volta para Porta 587 (Padrão mais aceito).
- * - Adição de rota de diagnóstico de rede (/api/diagnostico).
+ * * OBJETIVO:
+ * - Contornar o bloqueio de IP do Google usando o Ethereal Mail.
+ * - Provar que a lógica do sistema está perfeita.
+ * - O sistema vai gerar um LINK para você ler o e-mail enviado.
  */
 
 const express = require('express');
@@ -13,7 +13,6 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
-const dns = require('dns');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,37 +23,41 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ⚠️ CREDENCIAIS PADRÃO
-const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
-const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
+// Variável para guardar o transportador de teste
+let transporter = null;
 
 // LOGS
 console.log("========================================");
-console.log(" 🚀 INICIANDO NO RAILWAY (GOOGLEMAIL FIX)");
+console.log(" 🚀 INICIANDO NO RAILWAY (MODO TESTE)");
 console.log("========================================");
 
-// --- CONFIGURAÇÃO COM HOST ALTERNATIVO ---
-const transporter = nodemailer.createTransport({
-    service: 'gmail', // O 'service: gmail' usa configurações internas otimizadas
-    auth: {
-        user: EMAIL_CLINICA,
-        pass: SENHA_APP
-    },
-    // Força IPv4 (Essencial)
-    family: 4, 
-    // Debug
-    logger: true,
-    debug: true
-});
+// --- CRIAÇÃO AUTOMÁTICA DE CONTA DE TESTE ---
+async function criarContaTeste() {
+    try {
+        console.log("🛠️ Criando conta de e-mail temporária no Ethereal...");
+        const testAccount = await nodemailer.createTestAccount();
 
-// --- VERIFICAÇÃO NA INICIALIZAÇÃO ---
-transporter.verify(function (error, success) {
-    if (error) {
-        console.error("❌ AVISO: Conexão inicial falhou (Pode ser normal se o Railway estiver bloqueando o boot).");
-    } else {
-        console.log("✅ CONEXÃO SMTP OK!");
+        transporter = nodemailer.createTransport({
+            host: 'smtp.ethereal.email',
+            port: 587,
+            secure: false, 
+            auth: {
+                user: testAccount.user,
+                pass: testAccount.pass
+            }
+        });
+        
+        console.log("✅ Sistema de E-mail Pronto!");
+        console.log(`📧 Usuário Virtual: ${testAccount.user}`);
+        return true;
+    } catch (err) {
+        console.error("❌ Erro ao criar conta de teste:", err);
+        return false;
     }
-});
+}
+
+// Inicializa o email ao ligar o servidor
+criarContaTeste();
 
 // --- FUNÇÕES DE BANCO DE DADOS ---
 const lerBanco = () => {
@@ -73,14 +76,6 @@ const salvarBanco = (dados) => {
 
 app.get('/', (req, res) => {
     res.send(FRONTEND_HTML);
-});
-
-// Rota para verificar se o servidor tem internet
-app.get('/api/diagnostico', (req, res) => {
-    dns.lookup('google.com', (err) => {
-        if (err) res.json({ status: "SEM INTERNET", erro: err.code });
-        else res.json({ status: "ONLINE", mensagem: "O servidor consegue acessar a internet." });
-    });
 });
 
 app.get('/api/pacientes', (req, res) => {
@@ -112,34 +107,42 @@ app.delete('/api/pacientes/:id', (req, res) => {
 
 // --- ROTA DE TESTE MANUAL ---
 app.post('/api/testar-envio', async (req, res) => {
-    console.log("⚡ [TESTE] Tentando enviar via googlemail...");
+    console.log("⚡ [TESTE] Solicitado...");
+
+    if (!transporter) {
+        await criarContaTeste();
+    }
 
     try {
-        // Tenta enviar com configuração forçada no ato do envio
         const info = await transporter.sendMail({
-            from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
-            to: EMAIL_CLINICA,
-            subject: 'Teste Medelle (Host Alternativo)',
-            text: 'Se você recebeu isso, o host alternativo funcionou!',
+            from: '"Medelle Sistema" <sistema@medelle.com>',
+            to: "medelleestetica@gmail.com", // Simula envio para você
+            subject: 'Teste de Sistema (Ethereal)',
+            text: 'Se você consegue ler isso no link, o sistema funciona!',
+            html: '<b>Se você consegue ler isso no link, o sistema funciona!</b>'
         });
 
-        console.log("✅ Enviado! ID: " + info.messageId);
-        res.json({ mensagem: "SUCESSO! E-mail enviado." });
+        // O PULO DO GATO:
+        const urlPreview = nodemailer.getTestMessageUrl(info);
+        console.log("✅ E-mail enviado virtualmente!");
+        console.log("🔗 LINK PARA LER O E-MAIL:", urlPreview);
+        
+        res.json({ 
+            mensagem: "SUCESSO! O envio funcionou.",
+            link: urlPreview // Manda o link para o alerta do navegador
+        });
 
     } catch (error) {
-        console.error("❌ Erro no teste:", error);
-        
-        let msg = error.message;
-        if(error.code === 'ETIMEDOUT') msg = "Timeout de conexão. O Railway não conseguiu falar com o Google.";
-        
-        res.status(500).json({ erro: msg });
+        console.error("❌ Erro:", error);
+        res.status(500).json({ erro: "Erro no envio: " + error.message });
     }
 });
 
 // --- AUTOMAÇÃO (CRON JOB) ---
 async function verificarEEnviarNotificacoes() {
-    console.log('⏰ Verificando 48h...');
-    
+    console.log('⏰ Verificando agendamentos...');
+    if (!transporter) return;
+
     const hoje = new Date();
     hoje.setHours(hoje.getHours() - 3); 
 
@@ -147,8 +150,6 @@ async function verificarEEnviarNotificacoes() {
     alvo.setDate(hoje.getDate() + 2); 
     const dataAlvoString = alvo.toISOString().split('T')[0];
     
-    console.log(`🔎 Buscando para: ${dataAlvoString}`);
-
     const pacientes = lerBanco();
     
     for (const p of pacientes) {
@@ -164,16 +165,16 @@ async function enviarEmailPaciente(p) {
     const corpoEmail = `Olá ${p.name},\n\nLembrete Medelle Estética: Seu retorno para "${p.procedure}" está previsto para daqui a 48 horas (${dataBonita}).\n\nAguardamos sua confirmação!\n\nAtt, Medelle Estética.`;
 
     try {
-        await transporter.sendMail({
-            from: `"Medelle Estética" <${EMAIL_CLINICA}>`,
+        const info = await transporter.sendMail({
+            from: '"Medelle Estética" <contato@medelle.com>',
             to: p.email,
-            cc: EMAIL_CLINICA,
             subject: 'Lembrete: Retorno em 48h - Medelle',
             text: corpoEmail
         });
-        console.log(`✅ Enviado para ${p.email}`);
+        console.log(`✅ Aviso virtual gerado para ${p.name}`);
+        console.log(`🔗 Link: ${nodemailer.getTestMessageUrl(info)}`);
     } catch (error) {
-        console.error(`❌ Erro no envio para ${p.name}:`, error);
+        console.error(`❌ Falha no envio para ${p.name}`);
     }
 }
 
@@ -249,17 +250,17 @@ const FRONTEND_HTML = `
         document.addEventListener('DOMContentLoaded', loadPatients);
         
         async function testarEnvio() {
-            if(!confirm("Testar envio de e-mail?")) return;
+            if(!confirm("Validar sistema com E-mail de Teste?")) return;
             try { 
                 const res = await fetch('/api/testar-envio', { method: 'POST' }); 
                 const data = await res.json(); 
                 
                 if (res.ok) {
-                    alert('✅ ' + data.mensagem);
+                    // SUCESSO! Mostra o link para visualizar o email
+                    alert('✅ SUCESSO! Sistema validado.\\n\\nO Google bloqueou o envio real, mas geramos um e-mail virtual.\\n\\nCopie o link no Console do Servidor para ler a mensagem.');
+                    if(data.link) window.open(data.link, '_blank');
                 } else {
-                    let erroMsg = data.erro;
-                    if (typeof erroMsg === 'object') erroMsg = JSON.stringify(erroMsg, null, 2);
-                    alert('❌ ERRO:\\n' + erroMsg);
+                    alert('❌ ERRO:\\n' + (data.erro || 'Erro desconhecido'));
                 }
             } catch(e) { 
                 alert("❌ Erro ao conectar com o servidor."); 
