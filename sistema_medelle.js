@@ -26,8 +26,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // ⚠️ CREDENCIAIS
 // O Railway injetará isso automaticamente se configurado no painel
-const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || '').trim();
-const SENHA_APP = (process.env.SENHA_APP || '').trim();
+const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
+const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
 // LOGS
 console.log("========================================");
