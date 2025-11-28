@@ -1,9 +1,10 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO RAILWAY (PORTA 465 SSL + CREDENCIAIS PADRÃO)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - TENTATIVA FINAL RAILWAY (PORTA 587)
  * ---------------------------------------------------------
- * * ATUALIZAÇÃO:
- * - Credenciais de e-mail e senha definidas como padrão no código.
- * - Mantida a configuração de Porta 465 (SSL) + IPv4.
+ * * MUDANÇA DE ESTRATÉGIA:
+ * - Voltamos para a Porta 587 (STARTTLS).
+ * - Secure: FALSE (Obrigatório para 587).
+ * - Adicionamos 'keepAlive' para tentar manter o canal aberto.
  */
 
 const express = require('express');
@@ -15,7 +16,6 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-// Arquivo temporário para o Railway (resetado a cada deploy)
 const DB_FILE = '/tmp/banco_dados.json'; 
 
 // --- CONFIGURAÇÕES ---
@@ -23,29 +23,43 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ⚠️ CREDENCIAIS (Configuradas como padrão)
-// Se não houver variável de ambiente, usa estas strings fixas:
+// ⚠️ CREDENCIAIS
 const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
 const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
 // LOGS
 console.log("========================================");
-console.log(" 🚀 INICIANDO NO RAILWAY (SSL 465)");
-console.log(` 📧 E-mail configurado: ${EMAIL_CLINICA}`);
+console.log(" 🚀 INICIANDO NO RAILWAY (PORTA 587)");
 console.log("========================================");
 
-// --- CONFIGURAÇÃO MANUAL BLINDADA (PORTA 465) ---
+// --- CONFIGURAÇÃO (PORTA 587 - O PADRÃO DA WEB) ---
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // Endereço exato do Gmail
-    port: 465,              // Porta segura (SSL)
-    secure: true,           // TRUE é obrigatório para porta 465
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // OBRIGATÓRIO: false para porta 587
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
     },
-    family: 4, // Força IPv4 (Crucial para evitar timeouts de DNS)
-    logger: true, // Habilita logs detalhados no console do Railway
-    debug: true   // Mostra o handshake SMTP
+    family: 4, // Força IPv4 (Anti-timeout)
+    // Opções extras de rede para tentar furar o bloqueio
+    pool: true,       // Usa conexão em pool para ser mais robusto
+    maxConnections: 1,
+    rateLimit: 1,     // Limita velocidade para não parecer spam
+    tls: {
+        rejectUnauthorized: false
+    }
+});
+
+// --- VERIFICAÇÃO ---
+transporter.verify(function (error, success) {
+    if (error) {
+        console.error("❌ FALHA DE CONEXÃO INICIAL (587):");
+        // Não mostramos o erro inteiro para não poluir, mas o código é vital
+        console.error(error.code || error);
+    } else {
+        console.log("✅ CONEXÃO SMTP 587 SUCESSO!");
+    }
 });
 
 // --- FUNÇÕES DE BANCO DE DADOS ---
@@ -96,19 +110,21 @@ app.delete('/api/pacientes/:id', (req, res) => {
 
 // --- ROTA DE TESTE MANUAL ---
 app.post('/api/testar-envio', async (req, res) => {
-    console.log("⚡ [TESTE] Solicitado...");
+    console.log("⚡ [TESTE] Solicitado (Porta 587)...");
 
     try {
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
             to: EMAIL_CLINICA,
-            subject: 'Teste de Sistema (Railway Porta 465)',
-            text: 'O sistema Medelle conectou via SSL com sucesso usando as credenciais padrão!'
+            subject: 'Teste de Sistema (Railway Porta 587)',
+            text: 'Se este e-mail chegou, a Porta 587 é a solução para o Railway!'
         });
-        res.json({ mensagem: "E-mail enviado com sucesso!" });
+        
+        console.log("✅ E-mail enviado! ID:", info.messageId);
+        res.json({ mensagem: "SUCESSO! E-mail enviado." });
     } catch (error) {
         console.error("❌ Erro:", error);
-        res.status(500).json({ erro: "Erro no envio: " + error.message });
+        res.status(500).json({ erro: "Erro no envio: " + (error.code || error.message) });
     }
 });
 
