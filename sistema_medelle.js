@@ -1,9 +1,10 @@
 /**
- * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO FINAL (DEBUG VISUAL + PORTA 465)
+ * 🏥 SISTEMA MEDELLE ESTÉTICA - VERSÃO FINAL (CLEAN SMTP 587)
  * ---------------------------------------------------------
- * * CORREÇÃO:
- * - Resolve o alerta "[object Object]" convertendo o erro para texto.
- * - Tenta a combinação Porta 465 + SSL + IPv4 (Mais estável no Render).
+ * * AJUSTE FINAL:
+ * - Uso da porta 587 pura (sem configurações complexas de timeout que podem travar).
+ * - Remoção de 'service: gmail' para evitar conflitos internos.
+ * - Foco total em estabilidade de conexão.
  */
 
 const express = require('express');
@@ -22,40 +23,39 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ⚠️ CREDENCIAIS (Preencha as linhas abaixo)
+// ⚠️ CREDENCIAIS
 const EMAIL_CLINICA = (process.env.EMAIL_CLINICA || 'medelleestetica@gmail.com').trim();
 const SENHA_APP = (process.env.SENHA_APP || 'lcyn tarp wmqu egyx').trim();
 
-// LOGS NO SERVIDOR
+// LOGS
 console.log("========================================");
-console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (DEBUG)");
+console.log(" 🚀 INICIANDO SERVIDOR MEDELLE (PORTA 587)");
 console.log("========================================");
-console.log("✅ Credenciais carregadas para: " + EMAIL_CLINICA);
 
-// --- CONFIGURAÇÃO ROBUSTA (IPV4 + SSL 465) ---
+// --- CONFIGURAÇÃO LIMPA (SMTP 587) ---
+// Esta é a configuração mais compatível com firewalls de nuvem
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,      // Porta SSL (Geralmente desbloqueada no Render)
-    secure: true,   // True para porta 465
+    port: 587,
+    secure: false, // OBRIGATÓRIO ser false para porta 587
     auth: {
         user: EMAIL_CLINICA,
         pass: SENHA_APP
     },
-    family: 4, // Força IPv4 (Crucial!)
     tls: {
-        rejectUnauthorized: false
-    },
-    connectionTimeout: 20000, // 20 segundos
-    greetingTimeout: 20000,
-    socketTimeout: 20000
+        rejectUnauthorized: false,
+        ciphers: 'SSLv3' // Força compatibilidade máxima
+    }
 });
 
-// --- VERIFICAÇÃO IMEDIATA ---
+// --- VERIFICAÇÃO NA INICIALIZAÇÃO ---
 transporter.verify(function (error, success) {
     if (error) {
-        console.error("❌ FALHA NA CONEXÃO COM GMAIL:", error.code);
+        console.error("❌ AVISO: O Nodemailer não conseguiu conectar na inicialização.");
+        console.error("Erro:", error.code);
+        console.error("Motivo:", error.message);
     } else {
-        console.log("✅ CONEXÃO ESTABELECIDA! PRONTO PARA ENVIAR.");
+        console.log("✅ CONEXÃO SMTP 587 OK! PRONTO PARA ENVIO.");
     }
 });
 
@@ -111,27 +111,27 @@ app.delete('/api/pacientes/:id', (req, res) => {
 
 // --- ROTA DE TESTE MANUAL ---
 app.post('/api/testar-envio', async (req, res) => {
-    console.log("⚡ [TESTE] Tentando enviar...");
+    console.log("⚡ [TESTE] Tentando enviar via Porta 587...");
 
     try {
         const info = await transporter.sendMail({
             from: `"Medelle Sistema" <${EMAIL_CLINICA}>`,
             to: EMAIL_CLINICA,
-            subject: 'Teste Medelle (Sistema Desbloqueado)',
-            text: 'Sucesso! O sistema está configurado e enviando e-mails corretamente.'
+            subject: 'Teste Medelle (Porta 587)',
+            text: 'Se você recebeu isso, a porta 587 funcionou!'
         });
 
         console.log("✅ Enviado! ID: " + info.messageId);
-        res.json({ mensagem: "SUCESSO! E-mail enviado corretamente." });
+        res.json({ mensagem: "SUCESSO! E-mail enviado." });
 
     } catch (error) {
-        console.error("❌ Erro:", error);
+        console.error("❌ Erro no teste:", error);
         
-        // TRATAMENTO DO ERRO [Object object]
-        // Se o erro for um objeto, converte para texto. Se não, usa a mensagem ou código.
-        const msgErro = JSON.stringify(error, Object.getOwnPropertyNames(error));
+        // Formata o erro para leitura fácil
+        let msg = error.message;
+        if(error.code === 'ETIMEDOUT') msg = "O servidor do Render demorou demais para responder (Timeout). Tente novamente em 1 minuto.";
         
-        res.status(500).json({ erro: msgErro });
+        res.status(500).json({ erro: msg });
     }
 });
 
@@ -257,12 +257,9 @@ const FRONTEND_HTML = `
                 if (res.ok) {
                     alert('✅ ' + data.mensagem);
                 } else {
-                    // CORREÇÃO: Converte o objeto de erro para string legível
                     let erroMsg = data.erro;
-                    if (typeof erroMsg === 'object') {
-                        erroMsg = JSON.stringify(erroMsg, null, 2);
-                    }
-                    alert('❌ ERRO DETALHADO:\\n' + erroMsg);
+                    if (typeof erroMsg === 'object') erroMsg = JSON.stringify(erroMsg, null, 2);
+                    alert('❌ ERRO:\\n' + erroMsg);
                 }
             } catch(e) { 
                 alert("❌ Erro ao conectar com o servidor."); 
